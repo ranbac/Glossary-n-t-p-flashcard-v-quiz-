@@ -1,0 +1,126 @@
+// Hàm này sẽ thêm nút "Lưu" vào cuối nội dung của mỗi mục từ
+add_filter('the_content', 'add_save_to_study_list_button_final_fix');
+
+function add_save_to_study_list_button_final_fix($content) {
+    // Chỉ chạy trên các trang chi tiết của mục từ (post type 'glossary')
+    if (is_singular('glossary')) {
+        global $post;
+        
+        // Lấy tiêu đề mục từ
+        $term_title = get_the_title($post->ID);
+        
+        // Sử dụng cú pháp Nowdoc (<<<'EOT') để chèn khối HTML/JS một cách an toàn,
+        // tránh hoàn toàn các lỗi cú pháp do xung đột dấu nháy.
+        $button_html_template = <<<'HTML'
+        <div id="study-list-container" 
+             data-term="__TERM_TITLE__"
+             style="margin-top: 30px; padding: 20px; border: 2px dashed #a0aec0; border-radius: 8px; text-align: center;">
+            <button id="save-term-btn" style="padding: 12px 25px; font-size: 16px; font-weight: bold; color: white; background-color: #4a5568; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s;" disabled>
+                Đang tải...
+            </button>
+        </div>
+        
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const container = document.getElementById("study-list-container");
+            const saveBtn = document.getElementById("save-term-btn");
+            if (!container || !saveBtn) return;
+
+            let termDefinition = "";
+
+            function findNthLineOfContent(lineNumber) {
+                const contentSelectors = [
+                    ".glossary-definition", 
+                    ".entry-content",       
+                    ".post-content",        
+                    ".td-post-content",     
+                    "article"               
+                ];
+                
+                let contentElement = null;
+                for (const selector of contentSelectors) {
+                    contentElement = document.querySelector(selector);
+                    if (contentElement) break;
+                }
+
+                if (!contentElement) {
+                    console.error("Lỗi: Không tìm thấy vùng chứa nội dung chính.");
+                    saveBtn.textContent = "Lỗi: Không tìm thấy nội dung";
+                    return null;
+                }
+
+                const clone = contentElement.cloneNode(true);
+                const buttonContainerInClone = clone.querySelector("#study-list-container");
+                if (buttonContainerInClone) {
+                    buttonContainerInClone.remove();
+                }
+
+                const allText = clone.innerText || clone.textContent;
+                const allLines = allText.split(/\r?\n/);
+                const nonEmptyLines = allLines.filter(line => line.trim() !== '');
+                const targetIndex = lineNumber - 1;
+
+                if (nonEmptyLines.length > targetIndex) {
+                    return nonEmptyLines[targetIndex];
+                } else {
+                    console.error(`Lỗi: Không tìm thấy dòng thứ ${lineNumber}. Chỉ có ${nonEmptyLines.length} dòng.`);
+                    saveBtn.textContent = `Lỗi: Không đủ dòng`;
+                    return null;
+                }
+            }
+
+            termDefinition = findNthLineOfContent(4);
+            
+            if (termDefinition) {
+                 saveBtn.disabled = false;
+                 saveBtn.style.backgroundColor = "#2b6cb0";
+
+                 const termData = {
+                     term: container.dataset.term,
+                     definition: termDefinition
+                 };
+                 
+                 function getStudyList() {
+                     const list = localStorage.getItem('myStudyList');
+                     return list ? JSON.parse(list) : [];
+                 }
+
+                 function updateButtonState() {
+                     const studyList = getStudyList();
+                     const isSaved = studyList.some(item => item.term === termData.term);
+
+                     if (isSaved) {
+                         saveBtn.textContent = "✓ Đã lưu";
+                         saveBtn.disabled = true;
+                         saveBtn.style.backgroundColor = "#2f855a";
+                         saveBtn.style.cursor = "not-allowed";
+                     } else {
+                         saveBtn.textContent = "Lưu vào danh sách ôn tập";
+                     }
+                 }
+
+                 saveBtn.addEventListener("click", function() {
+                     const studyList = getStudyList();
+                     const isAlreadySaved = studyList.some(item => item.term === termData.term);
+
+                     if (!isAlreadySaved) {
+                         studyList.push(termData);
+                         localStorage.setItem('myStudyList', JSON.stringify(studyList));
+                         updateButtonState();
+                     }
+                 });
+
+                 updateButtonState();
+            }
+        });
+        </script>
+HTML;
+
+        // Thay thế placeholder __TERM_TITLE__ bằng tiêu đề mục từ thực tế
+        $button_html = str_replace('__TERM_TITLE__', esc_attr($term_title), $button_html_template);
+        
+        return $content . $button_html;
+    }
+    
+    return $content;
+}
