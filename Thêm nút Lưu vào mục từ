@@ -1,22 +1,32 @@
-// Hook to add the "Save" button to glossary post types
-add_filter('the_content', 'add_save_to_study_list_button_dynamic_finder');
+// Hook to add the study list controls to glossary post types
+add_filter('the_content', 'add_multi_study_list_controls');
 
-function add_save_to_study_list_button_dynamic_finder($content) {
+function add_multi_study_list_controls($content) {
     // Only run on single 'glossary' post pages
     if (is_singular('glossary')) {
         global $post;
-        
-        // Get the term title
         $term_title = get_the_title($post->ID);
         
-        // Use Nowdoc syntax for safe HTML/JS embedding
-        $button_html_template = <<<'HTML'
+        $controls_html_template = <<<'HTML'
         <div id="study-list-container" 
              data-term="__TERM_TITLE__"
-             style="margin-top: 30px; padding: 20px; border: 2px dashed #a0aec0; border-radius: 8px; text-align: center;">
-            <button id="save-term-btn" style="padding: 12px 25px; font-size: 16px; font-weight: bold; color: white; background-color: #4a5568; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s;" disabled>
-                Đang tải...
-            </button>
+             style="margin-top: 30px; padding: 20px; border: 2px dashed #a0aec0; border-radius: 8px;">
+            
+            <p style="margin-top: 0; margin-bottom: 15px; font-weight: bold; font-size: 18px; text-align: center;">Lưu vào danh sách ôn tập</p>
+            
+            <div id="study-list-controls" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;">
+                <select id="study-list-selector" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1;">
+                    <option>Đang tải danh sách...</option>
+                </select>
+                
+                <input type="text" id="new-list-name" placeholder="...hoặc tạo danh sách mới" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1;">
+                
+                <button id="save-term-btn" style="padding: 10px 20px; font-size: 16px; color: white; background-color: #2b6cb0; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s;">
+                    Lưu
+                </button>
+            </div>
+            
+            <p id="study-list-status" style="margin-top: 15px; margin-bottom: 0; text-align: center; font-weight: bold; color: #2f855a; min-height: 20px;"></p>
         </div>
         
         <script>
@@ -24,125 +34,132 @@ function add_save_to_study_list_button_dynamic_finder($content) {
             function initializeSaveFeature() {
                 try {
                     const container = document.getElementById("study-list-container");
+                    const listSelector = document.getElementById("study-list-selector");
+                    const newListNameInput = document.getElementById("new-list-name");
                     const saveBtn = document.getElementById("save-term-btn");
-                    if (!container || !saveBtn) return;
+                    const statusMsg = document.getElementById("study-list-status");
 
-                    let termDefinition = "";
+                    if (!container || !listSelector || !saveBtn || !statusMsg) return;
 
-                    // --- NEW, MORE RELIABLE LOGIC ---
-                    function findNthLineOfContent(lineNumber) {
-                        // Dynamically find the content container by finding the button's parent
-                        const buttonContainer = document.getElementById('study-list-container');
-                        if (!buttonContainer) {
-                            console.error("Save Feature Error: Button container not found in DOM.");
-                            saveBtn.textContent = "Lỗi: Giao diện không tương thích";
-                            return null;
-                        }
-                        
-                        // The parent of our button container IS the main content element.
-                        const contentElement = buttonContainer.parentElement;
-
-                        if (!contentElement) {
-                             console.error("Save Feature Error: Could not find parent element of the button.");
-                             saveBtn.textContent = "Lỗi: Không tìm thấy thẻ cha";
-                             return null;
-                        }
-
+                    // --- Find Definition (using '|' delimiter method) ---
+                    function findDefinitionByDelimiter() {
+                        const contentElement = container.parentElement;
                         const clone = contentElement.cloneNode(true);
                         const buttonContainerInClone = clone.querySelector("#study-list-container");
-                        if (buttonContainerInClone) {
-                            buttonContainerInClone.remove();
-                        }
-
+                        if (buttonContainerInClone) buttonContainerInClone.remove();
                         const allText = clone.innerText || clone.textContent;
-                        const allLines = allText.split(/\r?\n/);
-                        const nonEmptyLines = allLines.filter(line => line.trim() !== '');
-                        const targetIndex = lineNumber - 1;
-
-                        if (nonEmptyLines.length > targetIndex) {
-                            return nonEmptyLines[targetIndex];
-                        } else {
-                            console.error(`Save Feature Error: Could not find line ${lineNumber}. Only ${nonEmptyLines.length} lines found.`);
-                            saveBtn.textContent = `Lỗi: Không đủ dòng`;
-                            return null;
-                        }
+                        const definitionLine = (allText.split(/\r?\n/)).find(line => line.includes('|'));
+                        return definitionLine ? definitionLine.trim() : null;
                     }
 
-                    termDefinition = findNthLineOfContent(4);
-                    
-                    if (termDefinition) {
+                    const termDefinition = findDefinitionByDelimiter();
+                    if (!termDefinition) {
+                        container.innerHTML = "<p style='text-align:center; color: red;'>Lỗi: Không tìm thấy dòng định nghĩa hợp lệ (phải chứa dấu '|').</p>";
+                        return;
+                    }
+
+                    const termData = {
+                        term: container.dataset.term,
+                        definition: termDefinition
+                    };
+
+                    // --- Data Management Functions ---
+                    function getAllLists() {
+                        const lists = localStorage.getItem('allMyStudyLists');
+                        return lists ? JSON.parse(lists) : {};
+                    }
+
+                    function saveAllLists(lists) {
+                        localStorage.setItem('allMyStudyLists', JSON.stringify(lists));
+                    }
+
+                    // --- UI Update Functions ---
+                    function populateListSelector() {
+                        const allLists = getAllLists();
+                        const listNames = Object.keys(allLists);
+                        listSelector.innerHTML = ''; // Clear existing options
+
+                        if (listNames.length === 0) {
+                            const option = new Option("Chưa có danh sách nào", "", true, true);
+                            option.disabled = true;
+                            listSelector.add(option);
+                        } else {
+                            listNames.forEach(name => {
+                                listSelector.add(new Option(name, name));
+                            });
+                        }
+                        updateStatusMessage();
+                    }
+
+                    function updateStatusMessage() {
+                        const selectedList = listSelector.value;
+                        const allLists = getAllLists();
+                        statusMsg.textContent = '';
                         saveBtn.disabled = false;
                         saveBtn.style.backgroundColor = "#2b6cb0";
 
-                        const termData = {
-                            term: container.dataset.term,
-                            definition: termDefinition
-                        };
-                        
-                        // --- Local Storage and button logic (unchanged) ---
-                        if (typeof(Storage) === "undefined") {
-                            saveBtn.textContent = "Trình duyệt không hỗ trợ";
-                            saveBtn.disabled = true;
+                        if (selectedList && allLists[selectedList]) {
+                            const isSaved = allLists[selectedList].some(item => item.term === termData.term);
+                            if (isSaved) {
+                                statusMsg.textContent = `✓ Đã lưu vào danh sách "${selectedList}"`;
+                                saveBtn.disabled = true;
+                                saveBtn.style.backgroundColor = "#2f855a";
+                            }
+                        }
+                    }
+
+                    // --- Event Handlers ---
+                    saveBtn.addEventListener("click", function() {
+                        let targetListName = newListNameInput.value.trim();
+                        if (!targetListName) {
+                            targetListName = listSelector.value;
+                        }
+
+                        if (!targetListName || targetListName === "") {
+                            alert("Vui lòng chọn một danh sách hoặc nhập tên danh sách mới.");
                             return;
                         }
 
-                        function getStudyList() {
-                            const list = localStorage.getItem('myStudyList');
-                            return list ? JSON.parse(list) : [];
+                        const allLists = getAllLists();
+                        if (!allLists[targetListName]) {
+                            allLists[targetListName] = []; // Create new list if it doesn't exist
                         }
 
-                        function updateButtonState() {
-                            const studyList = getStudyList();
-                            const isSaved = studyList.some(item => item.term === termData.term);
-
-                            if (isSaved) {
-                                saveBtn.textContent = "✓ Đã lưu";
-                                saveBtn.disabled = true;
-                                saveBtn.style.backgroundColor = "#2f855a";
-                                saveBtn.style.cursor = "not-allowed";
-                            } else {
-                                saveBtn.textContent = "Lưu vào danh sách ôn tập";
-                            }
+                        const isAlreadySaved = allLists[targetListName].some(item => item.term === termData.term);
+                        if (!isAlreadySaved) {
+                            allLists[targetListName].push(termData);
+                            saveAllLists(allLists);
+                            newListNameInput.value = ''; // Clear input field
+                            populateListSelector(); // Repopulate to include the new list
+                            listSelector.value = targetListName; // Select the new list
+                            updateStatusMessage(); // Update status for the new list
+                        } else {
+                            alert(`Từ này đã có trong danh sách "${targetListName}".`);
                         }
+                    });
 
-                        saveBtn.addEventListener("click", function() {
-                            const studyList = getStudyList();
-                            const isAlreadySaved = studyList.some(item => item.term === termData.term);
+                    listSelector.addEventListener("change", updateStatusMessage);
+                    
+                    // --- Initial Load ---
+                    populateListSelector();
 
-                            if (!isAlreadySaved) {
-                                studyList.push(termData);
-                                localStorage.setItem('myStudyList', JSON.stringify(studyList));
-                                updateButtonState();
-                            }
-                        });
-
-                        updateButtonState();
-                    }
                 } catch (e) {
                     console.error("An error occurred in the save feature:", e);
-                    const saveBtn = document.getElementById("save-term-btn");
-                    if (saveBtn) {
-                         saveBtn.textContent = "Đã có lỗi xảy ra";
-                    }
+                    const container = document.getElementById("study-list-container");
+                    if(container) container.innerHTML = "<p>Đã có lỗi xảy ra. Vui lòng kiểm tra Console.</p>";
                 }
             }
 
-            // --- Polling Mechanism (waits for the button container itself to appear) ---
+            // --- Polling Mechanism (waits for container to appear) ---
             let attempts = 0;
-            const maxAttempts = 20; // Try for 10 seconds
+            const maxAttempts = 20;
             const readyCheckInterval = setInterval(function() {
-                const buttonContainer = document.getElementById('study-list-container');
-                
-                if (buttonContainer) {
+                if (document.getElementById('study-list-container')) {
                     clearInterval(readyCheckInterval);
                     initializeSaveFeature();
-                } else {
-                    attempts++;
-                    if (attempts > maxAttempts) {
-                        clearInterval(readyCheckInterval);
-                        console.error("Save Feature Error: Timed out waiting for button container to load.");
-                        // If the button container never appears, there's no button to update text on.
-                    }
+                } else if (++attempts > maxAttempts) {
+                    clearInterval(readyCheckInterval);
+                    console.error("Save Feature Error: Timed out waiting for container.");
                 }
             }, 500);
 
@@ -150,10 +167,9 @@ function add_save_to_study_list_button_dynamic_finder($content) {
         </script>
 HTML;
 
-        // Replace the placeholder with the actual term title
-        $button_html = str_replace('__TERM_TITLE__', esc_attr($term_title), $button_html_template);
-        
-        return $content . $button_html;
+        // Replace the placeholder with the actual term title and return
+        $final_html = str_replace('__TERM_TITLE__', esc_attr($term_title), $controls_html_template);
+        return $content . $final_html;
     }
     
     return $content;
