@@ -1,97 +1,75 @@
-// Đăng ký shortcode [my_study_tool]
-add_shortcode('my_study_tool', 'render_study_tool_app');
 
-function render_study_tool_app() {
-    // Bắt đầu bộ đệm đầu ra để lưu HTML
+// Đăng ký shortcode [my_study_tool]
+add_shortcode('my_study_tool', 'render_multi_list_study_tool_v3');
+
+function render_multi_list_study_tool_v3() {
     ob_start();
     ?>
     <style>
-        /* CSS cho toàn bộ công cụ, tương tự như phiên bản trước */
+        /* General Styles */
         #study-tool-app { font-family: sans-serif; }
-        .st-nav-tabs { display: flex; border-bottom: 2px solid #e2e8f0; margin-bottom: 25px; }
-        .st-nav-tab { padding: 12px 20px; cursor: pointer; font-weight: 600; color: #4a5568; border-bottom: 3px solid transparent; margin-bottom: -2px; }
-        .st-nav-tab.active { color: #2b6cb0; border-color: #2b6cb0; }
-        .st-view-content.hidden { display: none; }
+        .hidden { display: none !important; }
+
+        /* --- List Selector & Controls --- */
+        .st-list-selector-wrapper { padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 25px; background-color: #f7fafc; }
+        .st-list-selector-wrapper label { font-weight: bold; margin-bottom: 10px; display: block; }
+        .st-list-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        #study-list-main-selector { flex-grow: 1; min-width: 200px; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
+        .st-manage-btn { padding: 8px 15px; border: 1px solid #ccc; background-color: #fff; cursor: pointer; border-radius: 5px; font-weight: 600; }
+        .st-manage-btn:hover { background-color: #f0f0f0; }
+        .st-manage-btn-delete { border-color: #c53030; color: #c53030; }
+        .st-manage-btn-delete:hover { background-color: #fed7d7; }
         
-        /* CSS Quản lý danh sách */
+        /* Tabs */
+        .st-nav-tabs { display: flex; border-bottom: 2px solid #e2e8f0; margin-bottom: 25px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .st-nav-tab { background: none; border: none; padding: 12px 20px; cursor: pointer; font-weight: 600; color: #4a5568; border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+        .st-nav-tab.active { color: #2b6cb0; border-color: #2b6cb0; }
+        
+        /* Manage View */
         .st-term-item { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; }
         .st-term-item:hover { background-color: #f7fafc; }
-        .st-term-content { flex-grow: 1; padding-right: 16px; }
+        .st-term-content { flex-grow: 1; padding-right: 16px; word-break: break-word; }
         .st-term-content h3 { margin: 0 0 5px 0; font-size: 1.2em; }
         .st-term-content p { margin: 0; color: #718096; }
         .st-delete-btn { background: #fed7d7; color: #9b2c2c; border: none; font-weight: bold; border-radius: 5px; padding: 5px 10px; cursor: pointer; }
 
-        /* CSS Flashcard */
-        .card-container { perspective: 1000px; height: 280px; }
+        /* Flashcard View */
+        #flashcard-content { max-width: 550px; margin: 0 auto; padding: 0 25px; }
+        .card-container { perspective: 1000px; width: 100%; aspect-ratio: 4 / 3; margin-top: 20px; }
         .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; }
         .card-container.flipped .card-inner { transform: rotateY(180deg); }
-        .card-front, .card-back { position: absolute; width: 100%; height: 100%; -webkit-backface-visibility: hidden; backface-visibility: hidden; display: flex; justify-content: center; align-items: center; padding: 2rem; text-align: center; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
-        .card-front { font-size: 2em; font-weight: 700; background: #fff; }
-        .card-back { transform: rotateY(180deg); background: #ebf8ff; color: #2a4365; font-size: 1.2em; }
-        .flashcard-nav { display:flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+        .card-front, .card-back { position: absolute; width: 100%; height: 100%; -webkit-backface-visibility: hidden; backface-visibility: hidden; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        .card-content-wrapper { padding: 1rem; text-align: center; overflow-y: auto; max-height: 100%; }
+        .card-front .card-content-wrapper { font-size: clamp(1.5em, 6vw, 2.5em); font-weight: 700; }
+        .card-back .card-content-wrapper { font-size: clamp(1em, 4vw, 1.4em); }
+        .card-front { background: #fff; }
+        .card-back { transform: rotateY(180deg); background: #ebf8ff; color: #2a4365; }
+        .flashcard-nav { display:flex; justify-content: space-between; align-items: center; margin-top: 15px; }
 
-        /* CSS Quiz */
+        /* Quiz View */
         .quiz-option-btn { display: block; width: 100%; text-align: left; padding: 15px; margin-bottom: 10px; border: 2px solid #e2e8f0; border-radius: 8px; background-color: #fff; cursor: pointer; transition: all 0.2s; }
         .quiz-option-btn:hover { border-color: #4299e1; background-color: #ebf8ff; }
         .quiz-option-btn.correct { background-color: #c6f6d5 !important; border-color: #38a169 !important; }
         .quiz-option-btn.wrong { background-color: #fed7d7 !important; border-color: #e53e3e !important; }
+        .st-button, #restart-quiz { padding: 8px 16px; border-radius: 5px; border: 1px solid #ccc; cursor: pointer; }
     </style>
 
     <div id="study-tool-app">
-        <nav class="st-nav-tabs">
-            <button data-view="manage" class="st-nav-tab active">Quản lý danh sách</button>
-            <button data-view="flashcards" class="st-nav-tab">Flashcards</button>
-            <button data-view="quiz" class="st-nav-tab">Trắc nghiệm</button>
-        </nav>
-
-        <main>
-            <!-- View: Quản lý danh sách -->
-            <div id="manage-view" class="st-view-content">
-                <h2 style="font-size: 1.8em; margin-bottom: 20px;">Danh sách ôn tập của bạn (<span id="term-count">0</span>)</h2>
-                <div id="glossary-list"></div>
+        <div class="st-list-selector-wrapper">
+            <label for="study-list-main-selector">Quản lý danh sách học tập</label>
+            <div class="st-list-controls">
+                <select id="study-list-main-selector"></select>
+                <button id="rename-list-btn" class="st-manage-btn">Đổi tên</button>
+                <button id="delete-list-btn" class="st-manage-btn st-manage-btn-delete">Xóa</button>
             </div>
+        </div>
 
-            <!-- View: Flashcards -->
-            <div id="flashcards-view" class="st-view-content hidden">
-                 <div id="flashcard-content">
-                    <div class="card-container">
-                        <div class="card-inner">
-                            <div class="card-front"></div>
-                            <div class="card-back"></div>
-                        </div>
-                    </div>
-                    <div class="flashcard-nav">
-                        <button id="prev-card" class="st-button">&larr; Trước</button>
-                        <p id="card-counter"></p>
-                        <button id="next-card" class="st-button">Sau &rarr;</button>
-                    </div>
-                </div>
-                <div id="no-flashcard-terms" class="hidden">
-                    <p>Chưa có thuật ngữ nào. Hãy lưu ít nhất một mục từ để bắt đầu.</p>
-                </div>
-            </div>
-
-            <!-- View: Quiz -->
-            <div id="quiz-view" class="st-view-content hidden">
-                <div id="start-quiz-container">
-                     <h2 style="font-size: 1.8em; margin-bottom: 15px;">Sẵn sàng kiểm tra?</h2>
-                     <p id="quiz-instructions" style="margin-bottom: 20px;"></p>
-                     <button id="start-quiz-btn" style="padding: 12px 25px; font-size: 1.2em; background-color: #38a169; color: white; border: none; border-radius: 8px; cursor:pointer;">Bắt đầu</button>
-                </div>
-                <div id="quiz-main-content" class="hidden">
-                    <div id="quiz-question-area">
-                        <p id="question-counter"></p>
-                        <p id="question-text" style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;"></p>
-                        <div id="options-container"></div>
-                    </div>
-                    <div id="quiz-results" class="hidden">
-                        <h2 style="font-size: 1.8em;">Hoàn thành!</h2>
-                        <p>Điểm của bạn: <span id="score" style="font-weight: bold;"></span></p>
-                        <button id="restart-quiz">Làm lại</button>
-                    </div>
-                </div>
-            </div>
-        </main>
+        <div id="st-main-content" class="hidden">
+             </div>
+        
+        <div id="st-no-lists-message" class="hidden" style="text-align: center; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <p>Bạn chưa có danh sách ôn tập nào. Hãy vào một mục từ bất kỳ và lưu lại để tạo danh sách đầu tiên!</p>
+        </div>
     </div>
 
     <script>
@@ -99,209 +77,176 @@ function render_study_tool_app() {
         const app = document.getElementById('study-tool-app');
         if (!app) return;
 
+        let allLists = {};
+        let currentListName = null;
         let glossaryData = [];
         let currentCardIndex = 0;
         let quizQuestions = [];
         let currentQuestionIndex = 0;
         let score = 0;
 
-        const views = {
-            manage: app.querySelector('#manage-view'),
-            flashcards: app.querySelector('#flashcards-view'),
-            quiz: app.querySelector('#quiz-view'),
-        };
-        const navTabs = app.querySelectorAll('.st-nav-tab');
-        const termCountEl = app.querySelector('#term-count');
-        const glossaryListEl = app.querySelector('#glossary-list');
-
-        // --- DATA FUNCTIONS ---
-        function loadData() {
-            const savedData = localStorage.getItem('myStudyList');
-            glossaryData = savedData ? JSON.parse(savedData) : [];
-            renderManageList();
-        }
-
-        function saveData() {
-            localStorage.setItem('myStudyList', JSON.stringify(glossaryData));
-            renderManageList();
-        }
+        // --- DOM Elements ---
+        const listSelector = app.querySelector('#study-list-main-selector');
+        const renameBtn = app.querySelector('#rename-list-btn');
+        const deleteBtn = app.querySelector('#delete-list-btn');
+        const mainContent = app.querySelector('#st-main-content');
+        const noListsMessage = app.querySelector('#st-no-lists-message');
         
-        function renderManageList() {
-            glossaryListEl.innerHTML = '';
-            termCountEl.textContent = glossaryData.length;
-            if (glossaryData.length === 0) {
-                glossaryListEl.innerHTML = `<p>Danh sách của bạn đang trống. Hãy vào một mục từ bất kỳ và nhấn "Lưu vào danh sách ôn tập" để thêm vào đây.</p>`;
+        function initializeApp() {
+            // Lazy load content to prevent missing elements
+            mainContent.innerHTML = `
+                <nav class="st-nav-tabs">
+                    <button data-view="manage" class="st-nav-tab active">Quản lý</button>
+                    <button data-view="flashcards" class="st-nav-tab">Flashcards</button>
+                    <button data-view="quiz" class="st-nav-tab">Trắc nghiệm</button>
+                </nav>
+                <main>
+                    <div id="manage-view" class="st-view-content"><h2 style="font-size: 1.8em; margin-bottom: 20px;">Các mục từ (<span id="term-count">0</span>)</h2><div id="glossary-list"></div></div>
+                    <div id="flashcards-view" class="st-view-content hidden"><div id="flashcard-content"></div><div id="no-flashcard-terms" class="hidden" style="text-align: center; padding: 20px;"><p>Danh sách này chưa có mục từ nào.</p></div></div>
+                    <div id="quiz-view" class="st-view-content hidden"><div id="start-quiz-container"><h2 style="font-size: 1.8em; margin-bottom: 15px;">Sẵn sàng kiểm tra?</h2><p id="quiz-instructions" style="margin-bottom: 20px;"></p><button id="start-quiz-btn" style="padding: 12px 25px; font-size: 1.2em; background-color: #38a169; color: white; border: none; border-radius: 8px; cursor:pointer;">Bắt đầu</button></div><div id="quiz-main-content" class="hidden"><div id="quiz-question-area"></div><div id="quiz-results" class="hidden"><h2 style="font-size: 1.8em;">Hoàn thành!</h2><p>Điểm của bạn: <span id="score" style="font-weight: bold;"></span></p><button id="restart-quiz">Làm lại</button></div></div></div>
+                </main>`;
+            
+            loadAllLists();
+            populateListSelector();
+            const listNames = Object.keys(allLists);
+
+            if (listNames.length > 0) {
+                mainContent.classList.remove('hidden');
+                noListsMessage.classList.add('hidden');
+                renameBtn.disabled = false;
+                deleteBtn.disabled = false;
+                loadListByName(listNames[0]);
+            } else {
+                mainContent.classList.add('hidden');
+                noListsMessage.classList.remove('hidden');
+                renameBtn.disabled = true;
+                deleteBtn.disabled = true;
+            }
+            addEventListeners();
+        }
+
+        function addEventListeners() {
+            listSelector.addEventListener('change', (e) => loadListByName(e.target.value));
+            renameBtn.addEventListener('click', handleRenameList);
+            deleteBtn.addEventListener('click', handleDeleteList);
+            
+            // Event delegation for dynamically added elements
+            mainContent.addEventListener('click', (e) => {
+                const target = e.target;
+                if (target.matches('.st-nav-tab')) switchView(target.dataset.view);
+                if (target.matches('.st-delete-btn')) handleDeleteTerm(target);
+                if (target.matches('#start-quiz-btn')) startQuiz();
+                if (target.matches('#restart-quiz')) initQuizView();
+            });
+        }
+
+        function loadAllLists() { allLists = JSON.parse(localStorage.getItem('allMyStudyLists') || '{}'); }
+        function saveAllLists() { localStorage.setItem('allMyStudyLists', JSON.stringify(allLists)); }
+
+        function populateListSelector(selectAfterPopulate = null) {
+            const listNames = Object.keys(allLists);
+            listSelector.innerHTML = '';
+            if (listNames.length === 0) {
+                listSelector.add(new Option("Không có danh sách nào", ""));
                 return;
             }
-            glossaryData.forEach((item, index) => {
-                const div = document.createElement('div');
-                div.className = 'st-term-item';
-                div.innerHTML = `
-                    <div class="st-term-content">
-                        <h3>${escapeHtml(item.term)}</h3>
-                        <p>${escapeHtml(item.definition)}</p>
-                    </div>
-                    <button data-index="${index}" class="st-delete-btn">&times;</button>
-                `;
-                glossaryListEl.appendChild(div);
-            });
+            listNames.forEach(name => listSelector.add(new Option(name, name)));
+            if (selectAfterPopulate && listNames.includes(selectAfterPopulate)) {
+                listSelector.value = selectAfterPopulate;
+            }
+        }
+        
+        function loadListByName(listName) {
+            currentListName = listName;
+            glossaryData = allLists[currentListName] || [];
+            switchView('manage');
         }
 
-        // --- UI/VIEW MANAGEMENT ---
         function switchView(viewName) {
+            const views = { manage: mainContent.querySelector('#manage-view'), flashcards: mainContent.querySelector('#flashcards-view'), quiz: mainContent.querySelector('#quiz-view') };
+            const navTabs = mainContent.querySelectorAll('.st-nav-tab');
             Object.values(views).forEach(v => v.classList.add('hidden'));
-            views[viewName].classList.remove('hidden');
-            navTabs.forEach(t => {
-                t.classList.toggle('active', t.dataset.view === viewName);
-            });
+            if(views[viewName]) views[viewName].classList.remove('hidden');
+            navTabs.forEach(t => t.classList.toggle('active', t.dataset.view === viewName));
+            
+            if (viewName === 'manage') renderManageList();
             if (viewName === 'flashcards') initFlashcards();
             if (viewName === 'quiz') initQuizView();
         }
         
-        navTabs.forEach(tab => tab.addEventListener('click', () => switchView(tab.dataset.view)));
-        
-        glossaryListEl.addEventListener('click', (e) => {
-            if (e.target.classList.contains('st-delete-btn')) {
-                const index = parseInt(e.target.dataset.index);
-                glossaryData.splice(index, 1);
-                saveData();
-            }
-        });
+        // --- LIST MANAGEMENT ---
+        function handleRenameList() {
+            const oldName = listSelector.value;
+            if (!oldName) { alert("Vui lòng chọn một danh sách để đổi tên."); return; }
+            const newName = prompt("Nhập tên mới cho danh sách:", oldName);
 
-        // --- FLASHCARD LOGIC ---
-        const fc = {
-            content: app.querySelector('#flashcard-content'),
-            noTerms: app.querySelector('#no-flashcard-terms'),
-            container: app.querySelector('.card-container'),
-            front: app.querySelector('.card-front'),
-            back: app.querySelector('.card-back'),
-            counter: app.querySelector('#card-counter'),
-            prevBtn: app.querySelector('#prev-card'),
-            nextBtn: app.querySelector('#next-card')
-        };
-        
-        function initFlashcards() {
+            if (newName === null) return;
+            const trimmedNewName = newName.trim();
+            if (trimmedNewName === "" || trimmedNewName === oldName) return;
+            if (allLists[trimmedNewName]) { alert(`Tên "${trimmedNewName}" đã tồn tại.`); return; }
+
+            allLists[trimmedNewName] = allLists[oldName];
+            delete allLists[oldName];
+            saveAllLists();
+            populateListSelector(trimmedNewName);
+            loadListByName(trimmedNewName);
+        }
+
+        function handleDeleteList() {
+            const listNameToDelete = listSelector.value;
+            if (!listNameToDelete) { alert("Vui lòng chọn một danh sách để xóa."); return; }
+            if (confirm(`Bạn có chắc muốn XÓA VĨNH VIỄN danh sách "${listNameToDelete}" không? Hành động này không thể hoàn tác.`)) {
+                delete allLists[listNameToDelete];
+                saveAllLists();
+                initializeApp(); // Re-initialize the entire app to reflect the change
+            }
+        }
+
+        function renderManageList() {
+            const termCountEl = mainContent.querySelector('#term-count');
+            const glossaryListEl = mainContent.querySelector('#glossary-list');
+            glossaryListEl.innerHTML = '';
+            termCountEl.textContent = glossaryData.length;
             if (glossaryData.length > 0) {
-                fc.content.style.display = 'block';
-                fc.noTerms.style.display = 'none';
-                currentCardIndex = 0;
-                displayCard();
-            } else {
-                fc.content.style.display = 'none';
-                fc.noTerms.style.display = 'block';
-            }
-        }
-
-        function displayCard() {
-            if (fc.container.classList.contains('flipped')) {
-                 fc.container.classList.remove('flipped');
-            }
-            setTimeout(() => {
-                const card = glossaryData[currentCardIndex];
-                fc.front.textContent = card.term;
-                fc.back.textContent = card.definition;
-                fc.counter.textContent = `${currentCardIndex + 1} / ${glossaryData.length}`;
-            }, 200);
-        }
-
-        fc.container.addEventListener('click', () => fc.container.classList.toggle('flipped'));
-        fc.nextBtn.addEventListener('click', () => { currentCardIndex = (currentCardIndex + 1) % glossaryData.length; displayCard(); });
-        fc.prevBtn.addEventListener('click', () => { currentCardIndex = (currentCardIndex - 1 + glossaryData.length) % glossaryData.length; displayCard(); });
-
-        // --- QUIZ LOGIC ---
-        const qz = {
-            startContainer: app.querySelector('#start-quiz-container'),
-            startBtn: app.querySelector('#start-quiz-btn'),
-            instructions: app.querySelector('#quiz-instructions'),
-            main: app.querySelector('#quiz-main-content'),
-            questionArea: app.querySelector('#quiz-question-area'),
-            counter: app.querySelector('#question-counter'),
-            text: app.querySelector('#question-text'),
-            options: app.querySelector('#options-container'),
-            results: app.querySelector('#quiz-results'),
-            score: app.querySelector('#score'),
-            restartBtn: app.querySelector('#restart-quiz')
-        };
-
-        function initQuizView() {
-            qz.startContainer.style.display = 'block';
-            qz.main.classList.add('hidden');
-            qz.results.classList.add('hidden');
-            qz.questionArea.style.display = 'block';
-
-            if (glossaryData.length < 4) {
-                qz.startBtn.disabled = true;
-                qz.startBtn.style.opacity = '0.5';
-                qz.instructions.textContent = `Bạn cần ít nhất 4 mục từ trong danh sách để tạo trắc nghiệm. Hiện tại bạn có ${glossaryData.length}.`;
-            } else {
-                qz.startBtn.disabled = false;
-                qz.startBtn.style.opacity = '1';
-                qz.instructions.textContent = 'Bài trắc nghiệm sẽ được tạo ngẫu nhiên từ danh sách của bạn.';
-            }
-        }
-        
-        qz.startBtn.addEventListener('click', startQuiz);
-        qz.restartBtn.addEventListener('click', initQuizView);
-        
-        function startQuiz() {
-            qz.startContainer.style.display = 'none';
-            qz.main.classList.remove('hidden');
-            score = 0;
-            currentQuestionIndex = 0;
-            
-            const shuffled = [...glossaryData].sort(() => 0.5 - Math.random());
-            quizQuestions = shuffled.map(item => {
-                const correctAnswer = item.term;
-                const otherTerms = glossaryData.filter(d => d.term !== correctAnswer).map(d => d.term);
-                const options = [...otherTerms].sort(() => 0.5 - Math.random()).slice(0, 3);
-                options.push(correctAnswer);
-                return { question: item.definition, options: options.sort(() => 0.5 - Math.random()), answer: correctAnswer };
-            });
-
-            displayQuizQuestion();
-        }
-
-        function displayQuizQuestion() {
-            if (currentQuestionIndex >= quizQuestions.length) {
-                showQuizResults();
-                return;
-            }
-            const q = quizQuestions[currentQuestionIndex];
-            qz.counter.textContent = `Câu ${currentQuestionIndex + 1} / ${quizQuestions.length}`;
-            qz.text.textContent = q.question;
-            qz.options.innerHTML = q.options.map(opt => `<button class="quiz-option-btn">${escapeHtml(opt)}</button>`).join('');
-            qz.options.querySelectorAll('button').forEach(btn => btn.addEventListener('click', (e) => checkAnswer(e.target, q.answer)));
-        }
-        
-        function checkAnswer(btn, correct) {
-            qz.options.querySelectorAll('button').forEach(b => b.disabled = true);
-            if(btn.textContent === correct) {
-                score++;
-                btn.classList.add('correct');
-            } else {
-                btn.classList.add('wrong');
-                qz.options.querySelectorAll('button').forEach(b => {
-                    if (b.textContent === correct) b.classList.add('correct');
+                glossaryData.forEach((item, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'st-term-item';
+                    div.innerHTML = `<div class="st-term-content"><h3>${escapeHtml(item.term)}</h3><p>${escapeHtml(item.definition)}</p></div><button data-index="${index}" class="st-delete-btn">&times;</button>`;
+                    glossaryListEl.appendChild(div);
                 });
+            } else {
+                glossaryListEl.innerHTML = `<p style="padding: 0 15px;">Danh sách này đang trống.</p>`;
             }
-            setTimeout(() => { currentQuestionIndex++; displayQuizQuestion(); }, 1500);
         }
 
-        function showQuizResults() {
-            qz.questionArea.style.display = 'none';
-            qz.results.classList.remove('hidden');
-            qz.score.textContent = `${score} / ${quizQuestions.length}`;
+        function handleDeleteTerm(target) {
+            glossaryData.splice(parseInt(target.dataset.index, 10), 1);
+            allLists[currentListName] = glossaryData;
+            saveAllLists();
+            renderManageList();
         }
-        
-        // --- UTILS ---
-        function escapeHtml(str) { return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
 
-        // --- INIT ---
-        loadData();
-        switchView('manage');
+        function initFlashcards() { /* ... unchanged ... */ }
+        function displayCard() { /* ... unchanged ... */ }
+        function initQuizView() { /* ... unchanged ... */ }
+        function startQuiz() { /* ... unchanged ... */ }
+        function displayQuizQuestion() { /* ... unchanged ... */ }
+        function checkAnswer(btn, correct) { /* ... unchanged ... */ }
+        function showQuizResults() { /* ... unchanged ... */ }
+        function escapeHtml(str) { return str.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+
+        // --- PASTE UNCHANGED FUNCTIONS (collapsed for readability) ---
+        initFlashcards = function() { const fc = { container: mainContent.querySelector('#flashcard-content'), noTerms: mainContent.querySelector('#no-flashcard-terms') }; if (glossaryData.length > 0) { fc.container.classList.remove('hidden'); fc.noTerms.classList.add('hidden'); currentCardIndex = 0; fc.container.innerHTML = `<div class="card-container"><div class="card-inner"><div class="card-front"></div><div class="card-back"></div></div></div><div class="flashcard-nav"><button class="st-button prev-card">&larr; Trước</button><p class="card-counter"></p><button class="st-button next-card">Sau &rarr;</button></div>`; const cardContainer = fc.container.querySelector('.card-container'); cardContainer.addEventListener('click', () => cardContainer.classList.toggle('flipped')); fc.container.querySelector('.next-card').addEventListener('click', () => { currentCardIndex = (currentCardIndex + 1) % glossaryData.length; displayCard(); }); fc.container.querySelector('.prev-card').addEventListener('click', () => { currentCardIndex = (currentCardIndex - 1 + glossaryData.length) % glossaryData.length; displayCard(); }); displayCard(); } else { fc.container.classList.add('hidden'); fc.noTerms.classList.remove('hidden'); } };
+        displayCard = function() { const card = glossaryData[currentCardIndex]; const container = mainContent.querySelector('#flashcard-content'); const cardContainer = container.querySelector('.card-container'); if (cardContainer.classList.contains('flipped')) cardContainer.classList.remove('flipped'); setTimeout(() => { container.querySelector('.card-front').innerHTML = `<div class="card-content-wrapper">${escapeHtml(card.term)}</div>`; container.querySelector('.card-back').innerHTML = `<div class="card-content-wrapper">${escapeHtml(card.definition)}</div>`; container.querySelector('.card-counter').textContent = `${currentCardIndex + 1} / ${glossaryData.length}`; }, 200); };
+        initQuizView = function() { const qz = { startContainer: mainContent.querySelector('#start-quiz-container'), startBtn: mainContent.querySelector('#start-quiz-btn'), instructions: mainContent.querySelector('#quiz-instructions'), main: mainContent.querySelector('#quiz-main-content') }; qz.startContainer.classList.remove('hidden'); qz.main.classList.add('hidden'); if (glossaryData.length < 4) { qz.startBtn.disabled = true; qz.startBtn.style.opacity = '0.5'; qz.instructions.textContent = `Bạn cần ít nhất 4 mục từ trong danh sách để tạo trắc nghiệm. Hiện tại bạn có ${glossaryData.length}.`; } else { qz.startBtn.disabled = false; qz.startBtn.style.opacity = '1'; qz.instructions.textContent = 'Bài trắc nghiệm sẽ được tạo ngẫu nhiên từ danh sách của bạn.'; } };
+        startQuiz = function() { const qz = { startContainer: mainContent.querySelector('#start-quiz-container'), main: mainContent.querySelector('#quiz-main-content'), questionArea: mainContent.querySelector('#quiz-question-area'), results: mainContent.querySelector('#quiz-results') }; qz.startContainer.classList.add('hidden'); qz.main.classList.remove('hidden'); qz.questionArea.classList.remove('hidden'); qz.results.classList.add('hidden'); score = 0; currentQuestionIndex = 0; const shuffled = [...glossaryData].sort(() => 0.5 - Math.random()); quizQuestions = shuffled.map(item => { const otherTerms = glossaryData.filter(d => d.term !== item.term).map(d => d.term); const options = [...otherTerms].sort(() => 0.5 - Math.random()).slice(0, 3); options.push(item.term); return { question: item.definition, options: options.sort(() => 0.5 - Math.random()), answer: item.term }; }); displayQuizQuestion(); };
+        displayQuizQuestion = function() { const qz = { questionArea: mainContent.querySelector('#quiz-question-area') }; if (currentQuestionIndex >= quizQuestions.length) { showQuizResults(); return; } const q = quizQuestions[currentQuestionIndex]; qz.questionArea.innerHTML = `<p>Câu ${currentQuestionIndex + 1} / ${quizQuestions.length}</p><p style="font-size: 1.2em; font-weight: bold; margin-bottom: 20px;">${q.question}</p><div>${q.options.map(opt => `<button class="quiz-option-btn">${escapeHtml(opt)}</button>`).join('')}</div>`; qz.questionArea.querySelectorAll('.quiz-option-btn').forEach(btn => btn.addEventListener('click', (e) => checkAnswer(e.target, q.answer))); };
+        checkAnswer = function(btn, correct) { const qz = { questionArea: mainContent.querySelector('#quiz-question-area') }; const allButtons = qz.questionArea.querySelectorAll('.quiz-option-btn'); allButtons.forEach(b => b.disabled = true); if (btn.textContent === correct) { score++; btn.classList.add('correct'); } else { btn.classList.add('wrong'); allButtons.forEach(b => { if (b.textContent === correct) b.classList.add('correct'); }); } setTimeout(() => { currentQuestionIndex++; displayQuizQuestion(); }, 1500); };
+        showQuizResults = function() { const qz = { questionArea: mainContent.querySelector('#quiz-question-area'), results: mainContent.querySelector('#quiz-results'), score: mainContent.querySelector('#score') }; qz.questionArea.classList.add('hidden'); qz.results.classList.remove('hidden'); qz.score.textContent = `${score} / ${quizQuestions.length}`; };
+
+        initializeApp();
     });
     </script>
     <?php
-    // Trả về HTML đã được tạo
     return ob_get_clean();
 }
