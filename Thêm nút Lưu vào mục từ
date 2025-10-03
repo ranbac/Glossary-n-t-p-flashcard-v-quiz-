@@ -1,176 +1,208 @@
-// Hook to add the study list controls to glossary post types
-add_filter('the_content', 'add_multi_study_list_controls');
 
-function add_multi_study_list_controls($content) {
+/**
+ * ===================================================================
+ * FEATURE: SAVE GLOSSARY TERM TO STUDY LIST
+ * ===================================================================
+ * This code adds a feature to save glossary terms into lists using
+ * the browser's localStorage. It is split into two parts:
+ * 1. The HTML box that is displayed on the page.
+ * 2. The JavaScript logic that powers the feature.
+ * ===================================================================
+ */
+
+
+/**
+ * PART 1: ADD THE HTML BOX TO THE CONTENT
+ * -------------------------------------------------------------------
+ * Hooks into 'the_content' to display the feature.
+ * A high priority (99) ensures it appears before other hooked content.
+ */
+add_filter('the_content', 'add_study_list_html_to_content', 99);
+
+function add_study_list_html_to_content($content) {
     // Only run on single 'glossary' post pages
     if (is_singular('glossary')) {
         global $post;
         $term_title = get_the_title($post->ID);
         
-        $controls_html_template = <<<'HTML'
-        <div id="study-list-container" 
-             data-term="__TERM_TITLE__"
-             style="margin-top: 30px; padding: 20px; border: 2px dashed #a0aec0; border-radius: 8px;">
-            
-            <p style="margin-top: 0; margin-bottom: 15px; font-weight: bold; font-size: 18px; text-align: center;">Lưu vào danh sách ôn tập</p>
-            
-            <div id="study-list-controls" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;">
-                <select id="study-list-selector" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1;">
-                    <option>Đang tải danh sách...</option>
-                </select>
-                
-                <input type="text" id="new-list-name" placeholder="...hoặc tạo danh sách mới" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1;">
-                
-                <button id="save-term-btn" style="padding: 10px 20px; font-size: 16px; color: white; background-color: #2b6cb0; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s;">
-                    Lưu
-                </button>
-            </div>
-            
-            <p id="study-list-status" style="margin-top: 15px; margin-bottom: 0; text-align: center; font-weight: bold; color: #2f855a; min-height: 20px;"></p>
-        </div>
+        $controls_html = sprintf(
+            '<div id="study-list-container" data-term="%s" style="margin-bottom: 30px; padding: 20px; border: 2px dashed #a0aec0; border-radius: 8px;">
+                <p style="margin-top: 0; margin-bottom: 15px; font-weight: bold; font-size: 18px; text-align: center;">Lưu vào danh sách ôn tập</p>
+                <div id="study-list-controls" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;">
+                    <button id="save-term-btn" style="padding: 10px 20px; font-size: 16px; color: white; background-color: #2b6cb0; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; flex-shrink: 0;">Lưu</button>
+                    <select id="study-list-selector" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1;">
+                        <option>Đang tải danh sách...</option>
+                    </select>
+                    <input type="text" id="new-list-name" placeholder="...hoặc tạo danh sách mới" style="padding: 10px; border-radius: 5px; border: 1px solid #ccc; flex-grow: 1;">
+                </div>
+                <p id="study-list-status" style="margin-top: 15px; margin-bottom: 0; text-align: center; font-weight: bold; color: #2f855a; min-height: 20px;"></p>
+            </div>',
+            esc_attr($term_title)
+        );
         
-        <script>
-        (function() {
-            function initializeSaveFeature() {
-                try {
-                    const container = document.getElementById("study-list-container");
-                    const listSelector = document.getElementById("study-list-selector");
-                    const newListNameInput = document.getElementById("new-list-name");
-                    const saveBtn = document.getElementById("save-term-btn");
-                    const statusMsg = document.getElementById("study-list-status");
-
-                    if (!container || !listSelector || !saveBtn || !statusMsg) return;
-
-                    // --- Find Definition (using '|' delimiter method) ---
-                    function findDefinitionByDelimiter() {
-                        const contentElement = container.parentElement;
-                        const clone = contentElement.cloneNode(true);
-                        const buttonContainerInClone = clone.querySelector("#study-list-container");
-                        if (buttonContainerInClone) buttonContainerInClone.remove();
-                        const allText = clone.innerText || clone.textContent;
-                        const definitionLine = (allText.split(/\r?\n/)).find(line => line.includes('|'));
-                        return definitionLine ? definitionLine.trim() : null;
-                    }
-
-                    const termDefinition = findDefinitionByDelimiter();
-                    if (!termDefinition) {
-                        container.innerHTML = "<p style='text-align:center; color: red;'>Lỗi: Không tìm thấy dòng định nghĩa hợp lệ (phải chứa dấu '|').</p>";
-                        return;
-                    }
-
-                    const termData = {
-                        term: container.dataset.term,
-                        definition: termDefinition
-                    };
-
-                    // --- Data Management Functions ---
-                    function getAllLists() {
-                        const lists = localStorage.getItem('allMyStudyLists');
-                        return lists ? JSON.parse(lists) : {};
-                    }
-
-                    function saveAllLists(lists) {
-                        localStorage.setItem('allMyStudyLists', JSON.stringify(lists));
-                    }
-
-                    // --- UI Update Functions ---
-                    function populateListSelector() {
-                        const allLists = getAllLists();
-                        const listNames = Object.keys(allLists);
-                        listSelector.innerHTML = ''; // Clear existing options
-
-                        if (listNames.length === 0) {
-                            const option = new Option("Chưa có danh sách nào", "", true, true);
-                            option.disabled = true;
-                            listSelector.add(option);
-                        } else {
-                            listNames.forEach(name => {
-                                listSelector.add(new Option(name, name));
-                            });
-                        }
-                        updateStatusMessage();
-                    }
-
-                    function updateStatusMessage() {
-                        const selectedList = listSelector.value;
-                        const allLists = getAllLists();
-                        statusMsg.textContent = '';
-                        saveBtn.disabled = false;
-                        saveBtn.style.backgroundColor = "#2b6cb0";
-
-                        if (selectedList && allLists[selectedList]) {
-                            const isSaved = allLists[selectedList].some(item => item.term === termData.term);
-                            if (isSaved) {
-                                statusMsg.textContent = `✓ Đã lưu vào danh sách "${selectedList}"`;
-                                saveBtn.disabled = true;
-                                saveBtn.style.backgroundColor = "#2f855a";
-                            }
-                        }
-                    }
-
-                    // --- Event Handlers ---
-                    saveBtn.addEventListener("click", function() {
-                        let targetListName = newListNameInput.value.trim();
-                        if (!targetListName) {
-                            targetListName = listSelector.value;
-                        }
-
-                        if (!targetListName || targetListName === "") {
-                            alert("Vui lòng chọn một danh sách hoặc nhập tên danh sách mới.");
-                            return;
-                        }
-
-                        const allLists = getAllLists();
-                        if (!allLists[targetListName]) {
-                            allLists[targetListName] = []; // Create new list if it doesn't exist
-                        }
-
-                        const isAlreadySaved = allLists[targetListName].some(item => item.term === termData.term);
-                        if (!isAlreadySaved) {
-                            allLists[targetListName].push(termData);
-                            saveAllLists(allLists);
-                            newListNameInput.value = ''; // Clear input field
-                            populateListSelector(); // Repopulate to include the new list
-                            listSelector.value = targetListName; // Select the new list
-                            updateStatusMessage(); // Update status for the new list
-                        } else {
-                            alert(`Từ này đã có trong danh sách "${targetListName}".`);
-                        }
-                    });
-
-                    listSelector.addEventListener("change", updateStatusMessage);
-                    
-                    // --- Initial Load ---
-                    populateListSelector();
-
-                } catch (e) {
-                    console.error("An error occurred in the save feature:", e);
-                    const container = document.getElementById("study-list-container");
-                    if(container) container.innerHTML = "<p>Đã có lỗi xảy ra. Vui lòng kiểm tra Console.</p>";
-                }
-            }
-
-            // --- Polling Mechanism (waits for container to appear) ---
-            let attempts = 0;
-            const maxAttempts = 20;
-            const readyCheckInterval = setInterval(function() {
-                if (document.getElementById('study-list-container')) {
-                    clearInterval(readyCheckInterval);
-                    initializeSaveFeature();
-                } else if (++attempts > maxAttempts) {
-                    clearInterval(readyCheckInterval);
-                    console.error("Save Feature Error: Timed out waiting for container.");
-                }
-            }, 500);
-
-        })();
-        </script>
-HTML;
-
-        // Replace the placeholder with the actual term title and return
-        $final_html = str_replace('__TERM_TITLE__', esc_attr($term_title), $controls_html_template);
-        return $content . $final_html;
+        // Return the HTML box before the main post content
+        return $controls_html . $content;
     }
     
     return $content;
+}
+
+
+/**
+ * PART 2: ADD THE JAVASCRIPT TO THE SITE'S FOOTER
+ * -------------------------------------------------------------------
+ * Hooks into 'wp_footer' to add the script correctly.
+ * The script will only be added when viewing a 'glossary' post.
+ */
+add_action('wp_footer', 'add_study_list_script_to_footer');
+
+function add_study_list_script_to_footer() {
+    // Only add the script on single 'glossary' post pages
+    if (!is_singular('glossary')) {
+        return;
+    }
+    ?>
+    <script id="study-list-logic">
+    (function() {
+        // --- Polling Mechanism (waits for the HTML container to appear) ---
+        let attempts = 0;
+        const maxAttempts = 20;
+        const readyCheckInterval = setInterval(function() {
+            if (document.getElementById('study-list-container')) {
+                clearInterval(readyCheckInterval);
+                initializeSaveFeature();
+            } else if (++attempts > maxAttempts) {
+                clearInterval(readyCheckInterval);
+                console.error("Save Feature Error: Timed out waiting for container.");
+            }
+        }, 500);
+
+        // --- Main Functionality ---
+        function initializeSaveFeature() {
+            try {
+                const container = document.getElementById("study-list-container");
+                const listSelector = document.getElementById("study-list-selector");
+                const newListNameInput = document.getElementById("new-list-name");
+                const saveBtn = document.getElementById("save-term-btn");
+                const statusMsg = document.getElementById("study-list-status");
+
+                if (!container || !listSelector || !saveBtn || !statusMsg) {
+                    console.error("Save Feature Error: One or more required elements not found.");
+                    return;
+                }
+
+                // --- Find Definition (using '|' delimiter method) ---
+                function findDefinitionByDelimiter() {
+                    const contentElement = container.parentElement;
+                    const clone = contentElement.cloneNode(true);
+                    const buttonContainerInClone = clone.querySelector("#study-list-container");
+                    if (buttonContainerInClone) {
+                        buttonContainerInClone.remove();
+                    }
+                    const allText = clone.innerText || clone.textContent;
+                    // Find the first non-empty line that contains the pipe
+                    const definitionLine = (allText.split(/\r?\n/)).find(line => line.trim() !== '' && line.includes('|'));
+                    return definitionLine ? definitionLine.trim() : null;
+                }
+
+                const termDefinition = findDefinitionByDelimiter();
+                if (!termDefinition) {
+                    container.innerHTML = "<p style='text-align:center; color: red;'>Lỗi: Không tìm thấy dòng định nghĩa hợp lệ (phải chứa dấu '|').</p>";
+                    return;
+                }
+
+                const termData = {
+                    term: container.dataset.term,
+                    definition: termDefinition
+                };
+
+                // --- Data Management Functions (localStorage) ---
+                function getAllLists() {
+                    const lists = localStorage.getItem('allMyStudyLists');
+                    return lists ? JSON.parse(lists) : {};
+                }
+
+                function saveAllLists(lists) {
+                    localStorage.setItem('allMyStudyLists', JSON.stringify(lists));
+                }
+
+                // --- UI Update Functions ---
+                function populateListSelector() {
+                    const allLists = getAllLists();
+                    const listNames = Object.keys(allLists);
+                    listSelector.innerHTML = ''; // Clear existing options
+
+                    if (listNames.length === 0) {
+                        const option = new Option("Chưa có danh sách nào", "", true, true);
+                        option.disabled = true;
+                        listSelector.add(option);
+                    } else {
+                        listNames.forEach(name => {
+                            listSelector.add(new Option(name, name));
+                        });
+                    }
+                    updateStatusMessage();
+                }
+
+                function updateStatusMessage() {
+                    const selectedList = listSelector.value;
+                    const allLists = getAllLists();
+                    statusMsg.textContent = '';
+                    saveBtn.disabled = false;
+                    saveBtn.style.backgroundColor = "#2b6cb0";
+
+                    if (selectedList && allLists[selectedList]) {
+                        const isSaved = allLists[selectedList].some(item => item.term === termData.term);
+                        if (isSaved) {
+                            statusMsg.textContent = `✓ Đã lưu vào danh sách "${selectedList}"`;
+                            saveBtn.disabled = true;
+                            saveBtn.style.backgroundColor = "#2f855a";
+                        }
+                    }
+                }
+
+                // --- Event Handlers ---
+                saveBtn.addEventListener("click", function() {
+                    let targetListName = newListNameInput.value.trim();
+                    if (!targetListName) {
+                        targetListName = listSelector.value;
+                    }
+
+                    if (!targetListName || targetListName === "") {
+                        alert("Vui lòng chọn một danh sách hoặc nhập tên danh sách mới.");
+                        return;
+                    }
+
+                    const allLists = getAllLists();
+                    if (!allLists[targetListName]) {
+                        allLists[targetListName] = []; // Create new list
+                    }
+
+                    const isAlreadySaved = allLists[targetListName].some(item => item.term === termData.term);
+                    if (!isAlreadySaved) {
+                        allLists[targetListName].push(termData);
+                        saveAllLists(allLists);
+                        newListNameInput.value = ''; // Clear input field
+                        populateListSelector(); // Repopulate to include the new list
+                        listSelector.value = targetListName; // Select the new list
+                        updateStatusMessage(); // Update status
+                    } else {
+                        alert(`Từ này đã có trong danh sách "${targetListName}".`);
+                    }
+                });
+
+                listSelector.addEventListener("change", updateStatusMessage);
+                
+                // --- Initial Load ---
+                populateListSelector();
+
+            } catch (e) {
+                console.error("An error occurred in the save feature:", e);
+                const container = document.getElementById("study-list-container");
+                if(container) container.innerHTML = "<p>Đã có lỗi xảy ra. Vui lòng kiểm tra Console.</p>";
+            }
+        }
+    })();
+    </script>
+    <?php
 }
